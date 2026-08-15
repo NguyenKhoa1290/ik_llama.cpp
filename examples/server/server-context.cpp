@@ -3645,11 +3645,12 @@ void server_context::apply_checkpoint(server_slot & slot) {
     const auto pos_min_thold = std::max(0, pos_next - 1);
     const bool is_dsv4 = llama_model_is_deepseek4(model);
     const bool is_openpangu = llama_model_is_openpangu(model);
+    const bool is_qwen3next = llama_model_has_recurrent(model);
     if (slot.n_past > 0 && slot.n_past < slot.cache_tokens.n_tokens()) {
         int32_t pos_min = llama_kv_cache_seq_pos_min(slot.ctx, slot.id);
 
         // DSV4 and openPangu have pos_min=0 (no eviction) so the guard always blocks them
-        if (pos_min >= pos_min_thold || is_dsv4 || is_openpangu) {
+        if (pos_min >= pos_min_thold || is_dsv4 || is_openpangu || is_qwen3next) {
             SLT_WRN(slot, "n_past = %d, slot.prompt.tokens.size() = %d, seq_id = %d, pos_min = %d\n", slot.n_past, (int)slot.cache_tokens.size(), slot.id, pos_min);
 
             // search for a context checkpoint
@@ -3657,7 +3658,7 @@ void server_context::apply_checkpoint(server_slot & slot) {
                 slot.server_cached_prompt.checkpoints.rbegin(),
                 slot.server_cached_prompt.checkpoints.rend(),
                 [&](const auto & cur) {
-                    return cur.pos_max < (is_dsv4 || is_openpangu ? pos_next : pos_min_thold);
+                    return cur.pos_max < (is_dsv4 || is_openpangu || is_qwen3next ? pos_next : pos_min_thold);
                 }
             );
 
@@ -3685,7 +3686,7 @@ void server_context::apply_checkpoint(server_slot & slot) {
                 }
 
                 if (!do_reset) {
-                    if (is_dsv4 || is_openpangu) {
+                    if (is_dsv4 || is_openpangu || is_qwen3next) {
                         pos_next = std::min(pos_next, it->pos_max + 1);
                     } else {
                         pos_next = std::min(pos_next, std::max(it->pos_min + 1, it->pos_max));
@@ -3794,7 +3795,8 @@ bool server_context::create_checkpoint(server_slot & slot) {
     const auto checkpoint_pos_min = llama_model_is_openpangu(model) ? pos_max : pos_min;
 
     // no need for empty or small checkpoints
-    do_checkpoint = do_checkpoint && (pos_min >= 0 && slot.cache_tokens.n_tokens() >= 64);
+    const int checkpoint_min_tokens = llama_model_has_recurrent(model) ? 4 : 64;
+    do_checkpoint = do_checkpoint && (pos_min >= 0 && slot.cache_tokens.n_tokens() >= checkpoint_min_tokens);
 
     // no need to create checkpoints that are too close together
     do_checkpoint = do_checkpoint && (slot.server_cached_prompt.checkpoints.empty() || slot.cache_tokens.n_tokens() > slot.server_cached_prompt.checkpoints.back().n_tokens);
