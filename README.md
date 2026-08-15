@@ -26,7 +26,7 @@ This repository started as a fork of [llama.cpp](https://github.com/ggerganov/ll
 ### Prerequisites
 
 ```
-git clone https://github.com/ikawrakow/ik_llama.cpp
+git clone https://github.com/NguyenKhoa1290/ik_llama.cpp
 
 cd ik_llama.cpp
 ```
